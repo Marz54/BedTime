@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bedtime log</title>
+<style>
+:root {
+  --bg: #16213a;
+  --panel: #1f2c4d;
+  --line: #34446c;
+  --text: #e8ecf4;
+  --muted: #9aa8c7;
+  --amber: #f2b24c;
+  --lilac: #b9b4e8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, system-ui, "Helvetica Neue", sans-serif; }
+body { padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px); max-width: 480px; margin: 0 auto; }
+h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: 28px; margin: 4px 0 16px; }
+h2 { font-size: 16px; font-weight: 600; margin: 0 0 10px; }
+section { background: var(--panel); border-radius: 18px; padding: 16px; margin-bottom: 14px; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stat b { display: block; font-family: Georgia, serif; font-weight: 400; font-size: 26px; color: var(--amber); }
+.stat span { color: var(--muted); font-size: 13px; }
+.wide { grid-column: 1 / -1; }
+.nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.nav button { background: none; border: 1px solid var(--line); color: var(--text); width: 44px; height: 44px; border-radius: 12px; font-size: 18px; }
+.nav strong { font-size: 17px; font-weight: 600; }
+.grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.dow { text-align: center; font-size: 12px; color: var(--muted); padding-bottom: 4px; }
+.day { position: relative; aspect-ratio: 1; border: 1px solid transparent; border-radius: 12px; background: none; color: var(--text);
+  font-size: 15px; padding: 0; display: flex; align-items: flex-start; justify-content: flex-start; }
+.day span.n { position: absolute; top: 6px; left: 8px; }
+.day.blank { visibility: hidden; }
+.day.today { border-color: var(--lilac); }
+.day.sel { background: var(--bg); border-color: var(--amber); }
+.day .c { position: absolute; right: 5px; bottom: 5px; min-width: 20px; height: 20px; border-radius: 10px; background: var(--amber);
+  color: #16213a; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+.row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+.row label { color: var(--muted); font-size: 14px; }
+input[type=time] { flex: 1; min-height: 44px; font-size: 18px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); padding: 0 12px; }
+.primary { width: 100%; min-height: 52px; border: 0; border-radius: 14px; background: var(--amber); color: #16213a; font-size: 18px; font-weight: 700; }
+.ghost { min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: none; color: var(--text); font-size: 15px; padding: 0 14px; }
+.ghost.danger { color: #f19a9a; }
+ul { list-style: none; margin: 12px 0 0; padding: 0; }
+li { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: 16px; }
+li button { background: none; border: 0; color: var(--muted); font-size: 14px; min-height: 44px; padding: 0 4px; }
+.empty { color: var(--muted); font-size: 14px; margin: 12px 0 0; }
+.tools { display: flex; gap: 10px; flex-wrap: wrap; }
+.note { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--lilac); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<h1>Bedtime log</h1>
+
+<section aria-label="Averages">
+  <div class="stats">
+    <div class="stat wide"><b id="avg">–</b><span>Average bedtime</span></div>
+    <div class="stat"><b id="early">–</b><span>Earliest</span></div>
+    <div class="stat"><b id="late">–</b><span>Latest</span></div>
+    <div class="stat wide"><span id="count">No logs yet</span></div>
+  </div>
+</section>
+
+<section aria-label="Calendar">
+  <div class="nav">
+    <button id="prev" aria-label="Previous month">‹</button>
+    <strong id="month"></strong>
+    <button id="next" aria-label="Next month">›</button>
+  </div>
+  <div class="grid" id="grid"></div>
+</section>
+
+<section aria-label="Log bedtime">
+  <h2 id="selLabel">Today</h2>
+  <div class="row">
+    <label for="time">Time</label>
+    <input type="time" id="time">
+  </div>
+  <button class="primary" id="log">I'm going to bed</button>
+  <ul id="list"></ul>
+  <p class="empty" id="none">Nothing logged for this day.</p>
+</section>
+
+<section aria-label="Testing">
+  <h2>Test it</h2>
+  <div class="tools">
+    <button class="ghost" id="sample">Fill rest of this week</button>
+    <button class="ghost danger" id="clear">Clear all logs</button>
+  </div>
+  <p class="note">The sample button adds made-up bedtimes from tomorrow through Saturday.</p>
+</section>
+
+<script>
+(function () {
+  var KEY = 'bedtimeLogs';
+  var logs = {};
+  try { logs = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { logs = {}; }
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(logs)); } catch (e) {} }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function keyOf(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function parseKey(k) { var p = k.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function nowTime() { var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function fmt(mins) {
+    mins = ((Math.round(mins) % 1440) + 1440) % 1440;
+    var h = Math.floor(mins / 60), m = mins % 60, ap = h >= 12 ? 'PM' : 'AM';
+    return (h % 12 || 12) + ':' + pad(m) + ' ' + ap;
+  }
+  function toMins(t) { var p = t.split(':'); var m = +p[0] * 60 + +p[1]; return m < 720 ? m + 1440 : m; }
+
+  var today = new Date();
+  var selected = keyOf(today);
+  var viewY = today.getFullYear(), viewM = today.getMonth();
+  var $ = function (id) { return document.getElementById(id); };
+  $('time').value = nowTime();
+
+  function renderStats() {
+    var all = [], nights = 0;
+    Object.keys(logs).forEach(function (k) {
+      if (logs[k].length) nights++;
+      logs[k].forEach(function (t) { all.push(toMins(t)); });
+    });
+    if (!all.length) {
+      $('avg').textContent = $('early').textContent = $('late').textContent = '–';
+      $('count').textContent = 'No logs yet';
+      return;
+    }
+    var sum = all.reduce(function (a, b) { return a + b; }, 0);
+    $('avg').textContent = fmt(sum / all.length);
+    $('early').textContent = fmt(Math.min.apply(null, all));
+    $('late').textContent = fmt(Math.max.apply(null, all));
+    $('count').textContent = all.length + (all.length === 1 ? ' log' : ' logs') + ' across ' + nights + (nights === 1 ? ' day' : ' days');
+  }
+
+  function renderCalendar() {
+    var first = new Date(viewY, viewM, 1);
+    $('month').textContent = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    var g = $('grid');
+    g.innerHTML = '';
+    ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(function (d) {
+      var e = document.createElement('div'); e.className = 'dow'; e.textContent = d; g.appendChild(e);
+    });
+    for (var i = 0; i < first.getDay(); i++) {
+      var b = document.createElement('div'); b.className = 'day blank'; g.appendChild(b);
+    }
+    var days = new Date(viewY, viewM + 1, 0).getDate();
+    for (var d = 1; d <= days; d++) {
+      var k = viewY + '-' + pad(viewM + 1) + '-' + pad(d);
+      var btn = document.createElement('button');
+      btn.className = 'day' + (k === keyOf(today) ? ' today' : '') + (k === selected ? ' sel' : '');
+      btn.setAttribute('data-k', k);
+      var n = document.createElement('span'); n.className = 'n'; n.textContent = d; btn.appendChild(n);
+      var cnt = (logs[k] || []).length;
+      if (cnt) { var c = document.createElement('span'); c.className = 'c'; c.textContent = cnt; btn.appendChild(c); }
+      btn.setAttribute('aria-label', parseKey(k).toDateString() + (cnt ? ', ' + cnt + ' logged' : ''));
+      g.appendChild(btn);
+    }
+  }
+
+  function renderDay() {
+    var d = parseKey(selected);
+    $('selLabel').textContent = selected === keyOf(today) ? 'Today' :
+      d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+    var list = $('list');
+    list.innerHTML = '';
+    var items = (logs[selected] || []).slice().sort(function (a, b) { return toMins(a) - toMins(b); });
+    items.forEach(function (t) {
+      var li = document.createElement('li');
+      var s = document.createElement('span'); s.textContent = fmt(toMins(t));
+      var x = document.createElement('button'); x.textContent = 'Remove';
+      x.addEventListener('click', function () {
+        var arr = logs[selected]; arr.splice(arr.indexOf(t), 1);
+        if (!arr.length) delete logs[selected];
+        save(); render();
+      });
+      li.appendChild(s); li.appendChild(x); list.appendChild(li);
+    });
+    $('none').style.display = items.length ? 'none' : 'block';
+  }
+
+  function render() { renderStats(); renderCalendar(); renderDay(); }
+
+  $('grid').addEventListener('click', function (e) {
+    var btn = e.target.closest('.day');
+    if (!btn || !btn.getAttribute('data-k')) return;
+    selected = btn.getAttribute('data-k');
+    render();
+  });
+  $('prev').addEventListener('click', function () { viewM--; if (viewM < 0) { viewM = 11; viewY--; } renderCalendar(); });
+  $('next').addEventListener('click', function () { viewM++; if (viewM > 11) { viewM = 0; viewY++; } renderCalendar(); });
+
+  $('log').addEventListener('click', function () {
+    var t = $('time').value || nowTime();
+    (logs[selected] = logs[selected] || []).push(t);
+    save(); render();
+  });
+
+  $('sample').addEventListener('click', function () {
+    var samples = ['22:45', '23:10', '23:40', '00:20', '23:00', '22:30'];
+    var d = new Date(today); var i = 0;
+    d.setDate(d.getDate() + 1);
+    while (d.getDay() !== 0) {
+      var k = keyOf(d);
+      (logs[k] = logs[k] || []).push(samples[i % samples.length]);
+      i++; d.setDate(d.getDate() + 1);
+    }
+    if (i) {
+      var t = new Date(today); t.setDate(t.getDate() + 1);
+      selected = keyOf(t); viewY = t.getFullYear(); viewM = t.getMonth();
+    }
+    save(); render();
+  });
+
+  $('clear').addEventListener('click', function () {
+    if (confirm('Delete every logged bedtime?')) { logs = {}; save(); render(); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
